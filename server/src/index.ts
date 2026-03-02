@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { cors } from "@elysiajs/cors";
-import { staticPlugin } from "@elysiajs/static";
+import { join } from "path";
+import { existsSync } from "fs";
 import {
   getTodos,
   addTodo,
@@ -13,6 +14,7 @@ import {
 } from "./todos";
 
 const PORT = process.env.PORT || 3000;
+const PUBLIC_DIR = join(import.meta.dir, "../public");
 
 const app = new Elysia()
   .use(cors())
@@ -81,17 +83,15 @@ const app = new Elysia()
         },
       ),
   )
-  // Serve static frontend in production
-  .use(
-    staticPlugin({
-      assets: "public",
-      prefix: "/",
-    }),
-  )
-  // SPA fallback: serve index.html for non-API routes
-  .get("*", ({ set }) => {
-    set.headers["content-type"] = "text/html";
-    return Bun.file("public/index.html");
+  // Serve static files and SPA fallback
+  .get("*", ({ path }) => {
+    // Try to serve the exact file from public/
+    const filePath = join(PUBLIC_DIR, path);
+    if (path !== "/" && existsSync(filePath)) {
+      return Bun.file(filePath);
+    }
+    // SPA fallback: serve index.html
+    return Bun.file(join(PUBLIC_DIR, "index.html"));
   })
   .listen(PORT);
 
