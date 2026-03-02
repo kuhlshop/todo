@@ -12,6 +12,7 @@ import {
   getMonths,
   getSummary,
 } from "./todos";
+import { parseTodoPrompt } from "./ai";
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = join(import.meta.dir, "../public");
@@ -35,6 +36,23 @@ const app = new Elysia()
         ({ params }) => getWeekTodos(params.date),
         {
           params: t.Object({ date: t.String() }),
+        },
+      )
+      // Smart add: AI-powered natural language todo creation
+      .post(
+        "/todos/smart",
+        async ({ body, set }) => {
+          try {
+            const parsed = await parseTodoPrompt(body.prompt, body.today);
+            const todos = await addTodo(parsed.date, parsed.text, parsed.keys);
+            return { date: parsed.date, todos, parsed };
+          } catch (e) {
+            set.status = 500;
+            return { error: e instanceof Error ? e.message : "AI parsing failed" };
+          }
+        },
+        {
+          body: t.Object({ prompt: t.String(), today: t.String() }),
         },
       )
       // Add a todo

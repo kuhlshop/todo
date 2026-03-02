@@ -21,7 +21,14 @@
 
     <!-- Input -->
     <div class="mb-8">
-      <TodoInput ref="todoInput" @submit="addTodo" />
+      <TodoInput ref="todoInput" :is-thinking="isThinking" @submit="smartAdd" />
+      <!-- AI feedback toast -->
+      <div
+        v-if="aiMessage"
+        class="mt-2 px-3 py-2 rounded-lg text-xs bg-violet-50 text-violet-600 transition-opacity"
+      >
+        {{ aiMessage }}
+      </div>
     </div>
 
     <!-- Date label -->
@@ -102,6 +109,8 @@ export default defineComponent({
       todos: [] as Todo[],
       weekCounts: {} as WeekTodoCounts,
       isLoading: false,
+      isThinking: false,
+      aiMessage: "",
     };
   },
   computed: {
@@ -216,13 +225,40 @@ export default defineComponent({
       this.loadDay();
       this.loadWeek();
     },
-    async addTodo(text: string) {
+    async smartAdd(prompt: string) {
+      this.isThinking = true;
+      this.aiMessage = "";
       try {
-        this.todos = await api.addTodo(this.selectedDate, text);
-        this.weekCounts[this.selectedDate] = this.todos.length;
+        const result = await api.smartAdd(prompt, todayStr());
+        const targetDate = result.date;
+        // If the AI placed the todo on the currently viewed date, update in place
+        if (targetDate === this.selectedDate) {
+          this.todos = result.todos;
+        }
+        // Update week counts
+        this.weekCounts[targetDate] = result.todos.length;
+        // Show feedback if todo was placed on a different date
+        if (targetDate !== this.selectedDate) {
+          const d = new Date(targetDate + "T12:00:00");
+          const label = d.toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "short",
+            day: "numeric",
+          });
+          this.aiMessage = `Added to ${label}`;
+          // Navigate to that date
+          this.selectedDate = targetDate;
+          this.weekStart = getMonday(d);
+          await this.loadDay();
+          await this.loadWeek();
+          setTimeout(() => { this.aiMessage = ""; }, 3000);
+        }
       } catch (e) {
         console.error("Failed to add todo:", e);
+        this.aiMessage = "Failed to add todo. Please try again.";
+        setTimeout(() => { this.aiMessage = ""; }, 3000);
       }
+      this.isThinking = false;
     },
     async toggleTodo(index: number) {
       try {

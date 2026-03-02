@@ -4,9 +4,16 @@ import { join } from "path";
 
 const TODOS_DIR = join(import.meta.dir, "../../todos");
 
+export interface TodoKeys {
+  time?: string;
+  location?: string;
+  [key: string]: string | undefined;
+}
+
 export interface Todo {
   text: string;
   done: boolean;
+  keys?: TodoKeys;
 }
 
 export interface DayTodos {
@@ -29,16 +36,45 @@ function todoFilePath(date: string): string {
   return join(TODOS_DIR, monthFolder(date), todoFileName(date));
 }
 
+// Parse [keys:{...}] from the end of a todo line
+function parseKeys(raw: string): { text: string; keys?: TodoKeys } {
+  const keysMatch = raw.match(/^(.+?)\s*\[keys:\{(.+?)\}\]\s*$/);
+  if (!keysMatch) return { text: raw };
+  const text = keysMatch[1]!.trim();
+  const keyStr = keysMatch[2]!;
+  const keys: TodoKeys = {};
+  // Match key:value or key:"value with spaces"
+  const pairRegex = /(\w+):\s*(?:"([^"]*?)"|(\S+?))\s*(?:,|$)/g;
+  let m;
+  while ((m = pairRegex.exec(keyStr)) !== null) {
+    keys[m[1]!] = m[2] ?? m[3]!;
+  }
+  return { text, keys: Object.keys(keys).length > 0 ? keys : undefined };
+}
+
+// Serialize keys back to [keys:{...}] format
+function serializeKeys(keys?: TodoKeys): string {
+  if (!keys || Object.keys(keys).length === 0) return "";
+  const pairs = Object.entries(keys)
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => {
+      if (/\s/.test(v!)) return `${k}:"${v}"`;
+      return `${k}:${v}`;
+    })
+    .join(",");
+  return ` [keys:{${pairs}}]`;
+}
+
 // Parse a markdown todo file into Todo objects
 function parseTodoFile(content: string): Todo[] {
   const todos: Todo[] = [];
   for (const line of content.split("\n")) {
     const match = line.match(/^- \[([ x])\] (.+)$/);
     if (match) {
-      todos.push({
-        done: match[1] === "x",
-        text: match[2]!,
-      });
+      const { text, keys } = parseKeys(match[2]!);
+      const todo: Todo = { done: match[1] === "x", text };
+      if (keys) todo.keys = keys;
+      todos.push(todo);
     }
   }
   return todos;
@@ -55,7 +91,7 @@ function serializeTodos(date: string, todos: Todo[]): string {
   });
   let md = `# TODO - ${formatted}\n\n`;
   for (const todo of todos) {
-    md += `- [${todo.done ? "x" : " "}] ${todo.text}\n`;
+    md += `- [${todo.done ? "x" : " "}] ${todo.text}${serializeKeys(todo.keys)}\n`;
   }
   return md;
 }
@@ -86,9 +122,11 @@ export async function saveTodos(date: string, todos: Todo[]): Promise<void> {
 }
 
 // Add a new todo to a specific date
-export async function addTodo(date: string, text: string): Promise<Todo[]> {
+export async function addTodo(date: string, text: string, keys?: TodoKeys): Promise<Todo[]> {
   const { todos } = await getTodos(date);
-  todos.push({ text, done: false });
+  const todo: Todo = { text, done: false };
+  if (keys && Object.keys(keys).length > 0) todo.keys = keys;
+  todos.push(todo);
   await saveTodos(date, todos);
   return todos;
 }
