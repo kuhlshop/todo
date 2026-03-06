@@ -9,9 +9,11 @@ import {
   deleteTodo,
   updateTodoText,
   getWeekTodos,
+  getMonthTodoStats,
   getMonths,
   getSummary,
 } from "./todos";
+import { getSettings, saveSettings, WEEK_START_VALUES } from "./settings";
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = join(import.meta.dir, "../public");
@@ -35,6 +37,14 @@ const app = new Elysia()
         ({ params }) => getWeekTodos(params.date),
         {
           params: t.Object({ date: t.String() }),
+        },
+      )
+      // Get month todo stats
+      .get(
+        "/todos/month/:month",
+        ({ params }) => getMonthTodoStats(params.month),
+        {
+          params: t.Object({ month: t.String() }),
         },
       )
       // Add a todo
@@ -83,6 +93,20 @@ const app = new Elysia()
         ({ params }) => getSummary(params.month),
         {
           params: t.Object({ month: t.String() }),
+        },
+      )
+      // Get app settings
+      .get("/settings", () => getSettings())
+      // Update app settings
+      .put(
+        "/settings",
+        ({ body }) => saveSettings(body),
+        {
+          body: t.Object({
+            weekStartsOn: t.Optional(
+              t.Union(WEEK_START_VALUES.map((value) => t.Literal(value))),
+            ),
+          }),
         },
       ),
   )

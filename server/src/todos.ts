@@ -28,6 +28,13 @@ export interface AddTodoResult {
   createdTodo: Todo;
 }
 
+export interface DayTodoStats {
+  date: string;
+  total: number;
+  done: number;
+  upcoming: number;
+}
+
 // Get the folder name for a date: "2026-03"
 function monthFolder(date: string): string {
   return date.slice(0, 7);
@@ -221,6 +228,45 @@ export async function getWeekTodos(startDate: string): Promise<DayTodos[]> {
     results.push(await getTodos(dateStr));
   }
   return results;
+}
+
+export async function getMonthTodoStats(month: string): Promise<DayTodoStats[]> {
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error(`Invalid month format: ${month}`);
+  }
+
+  const monthDir = join(TODOS_DIR, month);
+  if (!existsSync(monthDir)) {
+    return [];
+  }
+
+  const entries = await readdir(monthDir, { withFileTypes: true });
+  const todoFiles = entries
+    .filter((entry) => entry.isFile() && /^TODO-\d{4}-\d{2}-\d{2}\.md$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+
+  const stats: DayTodoStats[] = [];
+
+  for (const fileName of todoFiles) {
+    const match = fileName.match(/^TODO-(\d{4}-\d{2}-\d{2})\.md$/);
+    if (!match) continue;
+
+    const date = match[1];
+    if (!date) continue;
+    const { todos } = await getTodos(date);
+    const done = todos.filter((todo) => todo.done).length;
+    const total = todos.length;
+
+    stats.push({
+      date,
+      total,
+      done,
+      upcoming: total - done,
+    });
+  }
+
+  return stats;
 }
 
 // Get all available months (for navigation)

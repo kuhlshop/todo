@@ -21,6 +21,19 @@ export interface AddTodoResult {
   createdTodo: Todo;
 }
 
+export type WeekStart = "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+
+export interface AppSettings {
+  weekStartsOn: WeekStart;
+}
+
+export interface DayTodoStats {
+  date: string;
+  total: number;
+  done: number;
+  upcoming: number;
+}
+
 async function request<T>(
   path: string,
   options?: RequestInit,
@@ -39,6 +52,9 @@ export const api = {
 
   getWeek: (startDate: string) =>
     request<DayTodos[]>(`/todos/week/${startDate}`),
+
+  getMonthStats: (month: string) =>
+    request<DayTodoStats[]>(`/todos/month/${month}`),
 
   addTodo: (date: string, text: string, timezone?: string) =>
     request<AddTodoResult>(`/todos/${date}`, {
@@ -65,4 +81,12 @@ export const api = {
   getMonths: () => request<string[]>("/months"),
 
   getSummary: (month: string) => request<string>(`/summary/${month}`),
+
+  getSettings: () => request<AppSettings>("/settings"),
+
+  updateSettings: (settings: Partial<AppSettings>) =>
+    request<AppSettings>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
 };
