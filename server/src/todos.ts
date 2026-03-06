@@ -1,17 +1,31 @@
 import { readdir, readFile, writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
+import { parseTodoWithClaude } from "./ai";
+import {
+  formatTodoText,
+  parseTodoText,
+  type TodoKeys,
+} from "./todo-format";
 
 const TODOS_DIR = join(import.meta.dir, "../../todos");
 
 export interface Todo {
   text: string;
   done: boolean;
+  title?: string;
+  keys?: TodoKeys;
 }
 
 export interface DayTodos {
   date: string;
   todos: Todo[];
+}
+
+export interface AddTodoResult {
+  date: string;
+  todos: Todo[];
+  createdTodo: Todo;
 }
 
 // Get the folder name for a date: "2026-03"
@@ -29,16 +43,32 @@ function todoFilePath(date: string): string {
   return join(TODOS_DIR, monthFolder(date), todoFileName(date));
 }
 
+function hydrateTodo(todo: Pick<Todo, "text" | "done">): Todo {
+  const parsed = parseTodoText(todo.text);
+  const keys = Object.keys(parsed.keys).length > 0 ? parsed.keys : undefined;
+
+  return {
+    done: todo.done,
+    text: todo.text,
+    title: parsed.title,
+    keys,
+  };
+}
+
 // Parse a markdown todo file into Todo objects
 function parseTodoFile(content: string): Todo[] {
   const todos: Todo[] = [];
   for (const line of content.split("\n")) {
     const match = line.match(/^- \[([ x])\] (.+)$/);
     if (match) {
-      todos.push({
-        done: match[1] === "x",
-        text: match[2]!,
-      });
+      const text = match[2];
+      if (!text) continue;
+      todos.push(
+        hydrateTodo({
+          done: match[1] === "x",
+          text,
+        }),
+      );
     }
   }
   return todos;
@@ -85,12 +115,46 @@ export async function saveTodos(date: string, todos: Todo[]): Promise<void> {
   await writeFile(path, serializeTodos(date, todos), "utf-8");
 }
 
-// Add a new todo to a specific date
-export async function addTodo(date: string, text: string): Promise<Todo[]> {
-  const { todos } = await getTodos(date);
-  todos.push({ text, done: false });
-  await saveTodos(date, todos);
-  return todos;
+// Add a new todo from natural language using Claude
+export async function addTodo(
+  contextDate: string,
+  prompt: string,
+  timezone?: string,
+): Promise<AddTodoResult> {
+  const parsed = await parseTodoWithClaude({
+    prompt,
+    contextDate,
+    timezone,
+  });
+
+  const targetDate = parsed.date;
+  const formattedText = formatTodoText(parsed.text, parsed.keys);
+
+  if (!formattedText) {
+    throw new Error("Parsed todo text was empty");
+  }
+
+  const { todos } = await getTodos(targetDate);
+  const createdTodo = hydrateTodo({
+    text: formattedText,
+    done: false,
+  });
+
+  if (process.env.DEV === "true") {
+    console.log("[todo-ai] Saving parsed todo", {
+      targetDate,
+      formattedText,
+    });
+  }
+
+  todos.push(createdTodo);
+  await saveTodos(targetDate, todos);
+
+  return {
+    date: targetDate,
+    todos,
+    createdTodo,
+  };
 }
 
 // Toggle a todo's completion status
@@ -131,7 +195,17 @@ export async function updateTodoText(
   if (index < 0 || index >= todos.length) {
     throw new Error(`Todo index ${index} out of range`);
   }
-  todos[index]!.text = text;
+
+  const current = todos[index];
+  if (!current) {
+    throw new Error(`Todo index ${index} out of range`);
+  }
+
+  todos[index] = hydrateTodo({
+    ...current,
+    text,
+  });
+
   await saveTodos(date, todos);
   return todos;
 }

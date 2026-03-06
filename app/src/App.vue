@@ -218,8 +218,22 @@ export default defineComponent({
     },
     async addTodo(text: string) {
       try {
-        this.todos = await api.addTodo(this.selectedDate, text);
-        this.weekCounts[this.selectedDate] = this.todos.length;
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const result = await api.addTodo(this.selectedDate, text, timezone);
+        const resolvedDate = result.date;
+        const wasViewingDate = this.selectedDate;
+
+        if (resolvedDate !== wasViewingDate) {
+          const resolvedDateObj = new Date(resolvedDate + "T12:00:00");
+          this.selectedDate = resolvedDate;
+          this.weekStart = getMonday(resolvedDateObj);
+          await this.loadWeek();
+        } else {
+          this.weekCounts[resolvedDate] = result.todos.length;
+        }
+
+        this.todos = result.todos;
+        this.weekCounts[resolvedDate] = result.todos.length;
       } catch (e) {
         console.error("Failed to add todo:", e);
       }
