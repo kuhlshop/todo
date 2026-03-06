@@ -40,10 +40,13 @@ const app = new Elysia()
       // Add a todo
       .post(
         "/todos/:date",
-        ({ params, body }) => addTodo(params.date, body.text),
+        ({ params, body }) => addTodo(params.date, body.text, body.timezone),
         {
           params: t.Object({ date: t.String() }),
-          body: t.Object({ text: t.String() }),
+          body: t.Object({
+            text: t.String(),
+            timezone: t.Optional(t.String()),
+          }),
         },
       )
       // Toggle a todo

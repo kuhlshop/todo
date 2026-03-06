@@ -51,7 +51,7 @@ export default defineComponent({
   props: {
     placeholder: {
       type: String,
-      default: "What's gotta get done?",
+      default: "Describe it naturally (e.g. Tuesday at 5:30 PM in Carlsbad)",
     },
   },
   emits: ["submit"],

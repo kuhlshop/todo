@@ -1,13 +1,24 @@
 const BASE = "/api";
 
+export type TodoKeyValue = string | number | boolean;
+export type TodoKeys = Record<string, TodoKeyValue>;
+
 export interface Todo {
   text: string;
   done: boolean;
+  title?: string;
+  keys?: TodoKeys;
 }
 
 export interface DayTodos {
   date: string;
   todos: Todo[];
+}
+
+export interface AddTodoResult {
+  date: string;
+  todos: Todo[];
+  createdTodo: Todo;
 }
 
 async function request<T>(
@@ -29,10 +40,10 @@ export const api = {
   getWeek: (startDate: string) =>
     request<DayTodos[]>(`/todos/week/${startDate}`),
 
-  addTodo: (date: string, text: string) =>
-    request<Todo[]>(`/todos/${date}`, {
+  addTodo: (date: string, text: string, timezone?: string) =>
+    request<AddTodoResult>(`/todos/${date}`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, timezone }),
     }),
 
   toggleTodo: (date: string, index: number) =>

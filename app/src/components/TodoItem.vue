@@ -27,14 +27,40 @@
       </svg>
     </button>
 
-    <span
+    <div
       v-if="!isEditing"
-      class="flex-1 text-sm leading-relaxed cursor-pointer select-none"
-      :class="todo.done ? 'line-through text-stone-400' : 'text-stone-700'"
+      class="flex-1 min-w-0 cursor-pointer select-none"
       @dblclick="startEditing"
     >
-      {{ todo.text }}
-    </span>
+      <div
+        class="text-sm leading-relaxed"
+        :class="todo.done ? 'line-through text-stone-400' : 'text-stone-700'"
+      >
+        {{ displayText }}
+      </div>
+
+      <div v-if="keyEntries.length > 0" class="mt-1.5 flex flex-wrap gap-1.5">
+        <template v-for="entry in keyEntries" :key="entry.key">
+          <a
+            v-if="entry.key === 'location'"
+            :href="locationHref(String(entry.value))"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium bg-sky-100 text-sky-800 hover:bg-sky-200 transition-colors"
+            @click.stop
+          >
+            {{ keyLabel(entry.key) }}: {{ String(entry.value) }}
+          </a>
+
+          <span
+            v-else
+            class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium bg-stone-200 text-stone-700"
+          >
+            {{ keyLabel(entry.key) }}: {{ formatKeyValue(entry.key, entry.value) }}
+          </span>
+        </template>
+      </div>
+    </div>
 
     <input
       v-else
@@ -59,7 +85,12 @@
 
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
-import type { Todo } from "../api";
+import type { Todo, TodoKeyValue } from "../api";
+
+interface TodoKeyEntry {
+  key: string;
+  value: TodoKeyValue;
+}
 
 export default defineComponent({
   name: "TodoItem",
@@ -75,6 +106,15 @@ export default defineComponent({
       isEditing: false,
       editText: "",
     };
+  },
+  computed: {
+    displayText(): string {
+      return this.todo.title?.trim() || this.todo.text;
+    },
+    keyEntries(): TodoKeyEntry[] {
+      const entries = Object.entries(this.todo.keys || {});
+      return entries.map(([key, value]) => ({ key, value }));
+    },
   },
   methods: {
     startEditing() {
@@ -95,6 +135,42 @@ export default defineComponent({
     },
     cancelEdit() {
       this.isEditing = false;
+    },
+    keyLabel(key: string): string {
+      return key.replace(/_/g, " ");
+    },
+    locationHref(location: string): string {
+      return `https://maps.apple.com/?q=${encodeURIComponent(location)}`;
+    },
+    formatKeyValue(key: string, value: TodoKeyValue): string {
+      if (key !== "time") return String(value);
+
+      const numericTime =
+        typeof value === "number"
+          ? value
+          : /^\d+$/.test(String(value))
+            ? Number(value)
+            : Number.NaN;
+
+      if (!Number.isFinite(numericTime)) {
+        return String(value);
+      }
+
+      const rounded = Math.round(numericTime);
+      const padded = String(rounded).padStart(4, "0");
+      const hours = Number(padded.slice(0, 2));
+      const minutes = Number(padded.slice(2, 4));
+
+      if (hours > 23 || minutes > 59) {
+        return String(value);
+      }
+
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
     },
   },
 });
