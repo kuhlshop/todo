@@ -1,1 +1,92 @@
 @import "tailwindcss";
+
+:root {
+  --theme-primary: #2563eb;
+  --theme-secondary: #7c3aed;
+  --theme-bg: #f7f7f5;
+  --theme-completed: #16a34a;
+  --theme-pending: #ea580c;
+  --font-heading:
+    "Poppins",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  --font-text:
+    "Inter",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  --app-bg: var(--theme-bg);
+  --surface: #ffffff;
+  --surface-muted: #fafaf9;
+  --border: #e7e5e4;
+  --text-primary: #292524;
+  --text-secondary: #57534e;
+  --text-muted: #a8a29e;
+  --accent: var(--theme-primary);
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text-primary);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+}
+
+.theme-root .bg-white {
+  background-color: var(--surface) !important;
+}
+
+.theme-root .bg-stone-50 {
+  background-color: var(--surface-muted) !important;
+}
+
+.theme-root .bg-stone-100 {
+  background-color: color-mix(in srgb, var(--surface) 88%, var(--text-primary) 12%) !important;
+}
+
+.theme-root .border-stone-200,
+.theme-root .border-stone-300 {
+  border-color: var(--border) !important;
+}
+
+.theme-root .text-stone-800,
+.theme-root .text-stone-700 {
+  color: var(--text-primary) !important;
+}
+
+.theme-root .text-stone-600,
+.theme-root .text-stone-500 {
+  color: var(--text-secondary) !important;
+}
+
+.theme-root .text-stone-400,
+.theme-root .text-stone-300 {
+  color: var(--text-muted) !important;
+}
+
+.theme-root .hover\:bg-stone-50:hover {
+  background-color: var(--surface-muted) !important;
+}
+
+.theme-root .hover\:bg-stone-100:hover {
+  background-color: color-mix(in srgb, var(--surface) 80%, var(--text-primary) 20%) !important;
+}
+
+.theme-root .hover\:border-stone-200:hover {
+  border-color: var(--border) !important;
+}

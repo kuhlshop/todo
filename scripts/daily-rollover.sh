@@ -1,20 +1,20 @@
 #!/bin/bash
-# Daily Todo Rollover - runs at 12:00 AM PST via cron
+# Daily Todo Rollover - runs at 12:00 AM UTC via cron
 # This script:
 # 1. Commits current state of todos/
 # 2. Invokes Claude Code to create tomorrow's todo file with carried-over items
 # 3. Invokes Claude Code to update the month's SUMMARY.md
 #
 # Cron entry (add with `crontab -e`):
-#   0 0 * * * TZ=America/Los_Angeles /home/user/todo/scripts/daily-rollover.sh >> /home/user/todo/scripts/rollover.log 2>&1
+#   0 0 * * * TZ=UTC /home/user/todo/scripts/daily-rollover.sh >> /home/user/todo/scripts/rollover.log 2>&1
 
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 
-# Get today's date in PST
-export TZ="America/Los_Angeles"
+# Get today's date in UTC
+export TZ="UTC"
 TODAY=$(date +%Y-%m-%d)
 YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
 MONTH=$(date +%Y-%m)

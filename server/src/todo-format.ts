@@ -132,6 +132,10 @@ export function parseTodoText(rawText: string): ParsedTodoText {
 
 function normalizeTimeStringToHHmm(raw: string): number | null {
   const trimmed = raw.trim().toLowerCase();
+  const compact = trimmed.replace(/\s+/g, "");
+  const meridiemNormalized = compact
+    .replace(/a\.?m?\.?$/, "am")
+    .replace(/p\.?m?\.?$/, "pm");
 
   if (/^\d{3,4}$/.test(trimmed)) {
     const padded = trimmed.padStart(4, "0");
@@ -143,7 +147,7 @@ function normalizeTimeStringToHHmm(raw: string): number | null {
     return null;
   }
 
-  const match = trimmed.match(/^(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?$/);
+  const match = meridiemNormalized.match(/^(\d{1,2})(?:(?::|\.)(\d{2}))?(am|pm)?$/);
   if (!match) return null;
 
   const hourToken = match[1];

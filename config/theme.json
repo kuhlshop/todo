@@ -1,0 +1,9 @@
+{
+  "primary": "#fdbe35",
+  "secondary": "#14b8a6",
+  "bg": "#e3e3e3",
+  "completed": "#dbac00",
+  "pending": "#9edfff",
+  "headingFont": "Montserrat",
+  "textFont": "Roboto"
+}

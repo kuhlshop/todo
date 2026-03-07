@@ -1,12 +1,13 @@
 import { readdir, readFile, writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
-import { parseTodoWithClaude } from "./ai";
+import { captureUsefulMemoryFromPrompt, parseTodoWithClaude } from "./ai";
 import {
   formatTodoText,
   parseTodoText,
   type TodoKeys,
 } from "./todo-format";
+import { getTopics } from "./topics";
 
 const TODOS_DIR = join(import.meta.dir, "../../todos");
 
@@ -20,6 +21,7 @@ export interface Todo {
 export interface DayTodos {
   date: string;
   todos: Todo[];
+  topics: string[];
 }
 
 export interface AddTodoResult {
@@ -107,12 +109,13 @@ async function ensureMonthDir(date: string): Promise<void> {
 
 // Read todos for a specific date
 export async function getTodos(date: string): Promise<DayTodos> {
+  const topics = await getTopics();
   const path = todoFilePath(date);
   if (!existsSync(path)) {
-    return { date, todos: [] };
+    return { date, todos: [], topics };
   }
   const content = await readFile(path, "utf-8");
-  return { date, todos: parseTodoFile(content) };
+  return { date, todos: parseTodoFile(content), topics };
 }
 
 // Save todos for a specific date
@@ -128,11 +131,16 @@ export async function addTodo(
   prompt: string,
   timezone?: string,
 ): Promise<AddTodoResult> {
-  const parsed = await parseTodoWithClaude({
-    prompt,
-    contextDate,
-    timezone,
-  });
+  let parsed: Awaited<ReturnType<typeof parseTodoWithClaude>>;
+  try {
+    parsed = await parseTodoWithClaude({
+      prompt,
+      contextDate,
+      timezone,
+    });
+  } finally {
+    await captureUsefulMemoryFromPrompt(prompt);
+  }
 
   const targetDate = parsed.date;
   const formattedText = formatTodoText(parsed.text, parsed.keys);
@@ -212,6 +220,33 @@ export async function updateTodoText(
     ...current,
     text,
   });
+
+  await saveTodos(date, todos);
+  return todos;
+}
+
+// Reorder a todo within the day's list.
+export async function reorderTodo(
+  date: string,
+  fromIndex: number,
+  toIndex: number,
+): Promise<Todo[]> {
+  const { todos } = await getTodos(date);
+  if (fromIndex < 0 || fromIndex >= todos.length) {
+    throw new Error(`Todo index ${fromIndex} out of range`);
+  }
+  if (toIndex < 0 || toIndex >= todos.length) {
+    throw new Error(`Todo index ${toIndex} out of range`);
+  }
+  if (fromIndex === toIndex) {
+    return todos;
+  }
+
+  const [moved] = todos.splice(fromIndex, 1);
+  if (!moved) {
+    throw new Error(`Todo index ${fromIndex} out of range`);
+  }
+  todos.splice(toIndex, 0, moved);
 
   await saveTodos(date, todos);
   return todos;

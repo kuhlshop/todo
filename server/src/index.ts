@@ -8,12 +8,19 @@ import {
   toggleTodo,
   deleteTodo,
   updateTodoText,
+  reorderTodo,
   getWeekTodos,
   getMonthTodoStats,
   getMonths,
   getSummary,
 } from "./todos";
 import { getSettings, saveSettings, WEEK_START_VALUES } from "./settings";
+import {
+  startTodoWatcher,
+  subscribeTodoChanges,
+  type TodoChangedEvent,
+} from "./todo-events";
+import { listConfigFiles, saveConfigFile } from "./config-files";
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = join(import.meta.dir, "../public");
@@ -23,6 +30,59 @@ const app = new Elysia()
   // API routes
   .group("/api", (app) =>
     app
+      // Stream todo file changes to connected clients (SSE)
+      .get("/todos/events", ({ request }) => {
+        const encoder = new TextEncoder();
+        let isClosed = false;
+        let closeStream = () => {};
+
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const send = (event: TodoChangedEvent) => {
+              controller.enqueue(
+                encoder.encode(
+                  `event: todo-changed\ndata: ${JSON.stringify(event)}\n\n`,
+                ),
+              );
+            };
+
+            const heartbeat = setInterval(() => {
+              if (isClosed) return;
+              controller.enqueue(encoder.encode(": ping\n\n"));
+            }, 20000);
+
+            const unsubscribe = subscribeTodoChanges(send);
+
+            closeStream = () => {
+              if (isClosed) return;
+              isClosed = true;
+              clearInterval(heartbeat);
+              unsubscribe();
+              try {
+                controller.close();
+              } catch {
+                // Stream may already be closed.
+              }
+            };
+
+            request.signal.addEventListener("abort", closeStream, {
+              once: true,
+            });
+            controller.enqueue(encoder.encode(": connected\n\n"));
+          },
+          cancel() {
+            closeStream();
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        });
+      })
       // Get todos for a date
       .get(
         "/todos/:date",
@@ -77,6 +137,19 @@ const app = new Elysia()
           body: t.Object({ text: t.String() }),
         },
       )
+      // Reorder a todo
+      .put(
+        "/todos/:date/reorder",
+        ({ params, body }) =>
+          reorderTodo(params.date, body.fromIndex, body.toIndex),
+        {
+          params: t.Object({ date: t.String() }),
+          body: t.Object({
+            fromIndex: t.Number(),
+            toIndex: t.Number(),
+          }),
+        },
+      )
       // Delete a todo
       .delete(
         "/todos/:date/:index",
@@ -106,7 +179,30 @@ const app = new Elysia()
             weekStartsOn: t.Optional(
               t.Union(WEEK_START_VALUES.map((value) => t.Literal(value))),
             ),
+            moveDoneToBottom: t.Optional(t.Boolean()),
           }),
+        },
+      )
+      // List editable config files as typed editor payloads
+      .get("/config/files", () => listConfigFiles())
+      // Save one config file by name
+      .put(
+        "/config/files/:fileName",
+        ({ params, body }) =>
+          saveConfigFile(params.fileName, {
+            markdown:
+              body && typeof body === "object" && "markdown" in body
+                ? (body as { markdown?: unknown }).markdown as string | undefined
+                : undefined,
+            jsonValues:
+              body && typeof body === "object" && "jsonValues" in body
+                ? (body as { jsonValues?: unknown }).jsonValues as
+                    | Record<string, unknown>
+                    | undefined
+                : undefined,
+          }),
+        {
+          params: t.Object({ fileName: t.String() }),
         },
       ),
   )
@@ -122,4 +218,5 @@ const app = new Elysia()
   })
   .listen(PORT);
 
+await startTodoWatcher();
 console.log(`Todo app running at http://localhost:${PORT}`);

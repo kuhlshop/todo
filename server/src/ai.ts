@@ -1,5 +1,8 @@
 import { spawn } from "child_process";
+import { appendFile, mkdir, readFile } from "fs/promises";
+import { dirname, join } from "path";
 import { normalizeTodoKeys, type TodoKeys } from "./todo-format";
+import { getTopics } from "./topics";
 
 export interface ParseTodoArgs {
   prompt: string;
@@ -28,6 +31,10 @@ interface ClaudeRunConfig {
   promptMode: "arg" | "stdin";
   timeoutMs: number;
 }
+
+const MEMORY_FILE = join(import.meta.dir, "../../config/memory.md");
+const MEMORY_PROMPT_LIMIT = Number(process.env.MEMORY_PROMPT_LIMIT || 4000);
+const MEMORY_CANDIDATE_LIMIT = 5;
 
 function isDevLoggingEnabled(): boolean {
   return process.env.DEV === "true";
@@ -61,6 +68,70 @@ function parseArgList(raw: string | undefined, fallback: string[]): string[] {
     .split(/\s+/)
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function normalizeMemoryLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function cleanMemoryCandidate(value: string): string {
+  return value
+    .trim()
+    .replace(/^-+\s*/, "")
+    .replace(/\s+/g, " ");
+}
+
+async function ensureMemoryFile(): Promise<void> {
+  await mkdir(dirname(MEMORY_FILE), { recursive: true });
+  try {
+    await readFile(MEMORY_FILE, "utf-8");
+  } catch {
+    const initial = [
+      "# Memory",
+      "",
+      "Store durable user facts as markdown list items for future prompts.",
+      "Use `##` headings for todo topics. Example:",
+      "## Work",
+      "## Personal",
+      "",
+      "Example entry format: - Home address is 2570 Vista Way, Oceanside, CA 92054",
+      "",
+    ].join("\n");
+    await appendFile(MEMORY_FILE, initial, "utf-8");
+  }
+}
+
+function extractMemoryItems(markdown: string): string[] {
+  return markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter(Boolean);
+}
+
+async function readMemoryFile(): Promise<string> {
+  await ensureMemoryFile();
+  return readFile(MEMORY_FILE, "utf-8");
+}
+
+async function readMemoryContextForPrompt(): Promise<string> {
+  const memoryMarkdown = await readMemoryFile();
+  const items = extractMemoryItems(memoryMarkdown);
+
+  if (items.length === 0) {
+    return "(none)";
+  }
+
+  const serialized = items.map((item) => `- ${item}`).join("\n");
+  if (serialized.length <= MEMORY_PROMPT_LIMIT) return serialized;
+  return serialized.slice(-MEMORY_PROMPT_LIMIT);
+}
+
+async function readTopicsContextForPrompt(): Promise<string> {
+  const topics = await getTopics();
+  if (topics.length === 0) return "(none)";
+  return topics.map((topic) => `- ${topic}`).join("\n");
 }
 
 async function runLocalClaude(prompt: string): Promise<string> {
@@ -264,6 +335,20 @@ function extractAssistantText(payload: unknown): string {
   return pieces.join("\n").trim();
 }
 
+function extractModelText(rawOutput: string): string {
+  let modelText = rawOutput;
+  try {
+    const payload = JSON.parse(rawOutput) as unknown;
+    const extracted = extractAssistantText(payload);
+    if (extracted) {
+      modelText = extracted;
+    }
+  } catch {
+    // If stdout is plain text, use it directly.
+  }
+  return modelText;
+}
+
 function parseJsonFromModelText(text: string): unknown {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("Claude returned an empty response");
@@ -293,6 +378,91 @@ function parseJsonFromModelText(text: string): unknown {
   throw new Error("Claude response did not contain valid JSON");
 }
 
+async function extractMemoryCandidates(
+  prompt: string,
+  existingMemory: string,
+): Promise<string[]> {
+  const systemPrompt = [
+    "You extract durable personal memory facts from a task request.",
+    "Return JSON only with this schema:",
+    '{"memories":["fact one","fact two"]}',
+    "Rules:",
+    "- Only include explicit, durable facts that may help future tasks.",
+    "- Skip task-specific, temporary, or speculative details.",
+    "- Keep each fact short and standalone.",
+    "- If there is nothing useful, return an empty memories array.",
+    "- Never return more than 5 items.",
+  ].join("\n");
+
+  const userPrompt = [
+    "existing_memory:",
+    existingMemory || "(none)",
+    "",
+    "task_request:",
+    prompt,
+  ].join("\n");
+
+  const rawOutput = await runLocalClaude(`${systemPrompt}\n\n${userPrompt}`);
+  const modelText = extractModelText(rawOutput);
+  const parsed = parseJsonFromModelText(modelText);
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return [];
+  }
+
+  const raw = parsed as Record<string, unknown>;
+  if (!Array.isArray(raw.memories)) {
+    return [];
+  }
+
+  return raw.memories
+    .filter((entry) => typeof entry === "string")
+    .map((entry) => cleanMemoryCandidate(entry))
+    .filter((entry) => entry.length > 0)
+    .slice(0, MEMORY_CANDIDATE_LIMIT);
+}
+
+async function saveMemoryCandidates(candidates: string[]): Promise<string[]> {
+  if (candidates.length === 0) return [];
+
+  const existingMarkdown = await readMemoryFile();
+  const existingItems = extractMemoryItems(existingMarkdown);
+  const existingSet = new Set(existingItems.map((item) => normalizeMemoryLine(item)));
+
+  const uniqueToAdd: string[] = [];
+  for (const candidate of candidates) {
+    const normalized = normalizeMemoryLine(candidate);
+    if (existingSet.has(normalized)) continue;
+    existingSet.add(normalized);
+    uniqueToAdd.push(candidate);
+  }
+
+  if (uniqueToAdd.length === 0) return [];
+
+  const suffix = `${uniqueToAdd.map((item) => `- ${item}`).join("\n")}\n`;
+  await appendFile(MEMORY_FILE, suffix, "utf-8");
+  return uniqueToAdd;
+}
+
+export async function captureUsefulMemoryFromPrompt(prompt: string): Promise<void> {
+  const trimmedPrompt = prompt.trim();
+  if (!trimmedPrompt) return;
+
+  try {
+    const existingMemory = await readMemoryFile();
+    const candidates = await extractMemoryCandidates(trimmedPrompt, existingMemory);
+    const added = await saveMemoryCandidates(candidates);
+    if (added.length > 0) {
+      devLog("Added memory entries", {
+        count: added.length,
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    devLog("Skipping memory update after extraction error", { message });
+  }
+}
+
 export async function parseTodoWithClaude(
   args: ParseTodoArgs,
 ): Promise<ParsedTodoIntent> {
@@ -307,6 +477,8 @@ export async function parseTodoWithClaude(
 
   const timezone = args.timezone?.trim() || "America/Los_Angeles";
   const todayInTimezone = dateInTimezone(timezone);
+  const memoryContext = await readMemoryContextForPrompt();
+  const topicsContext = await readTopicsContextForPrompt();
   devLog("Parsing todo with Claude", {
     contextDate: args.contextDate,
     timezone,
@@ -325,9 +497,11 @@ export async function parseTodoWithClaude(
     "- If no date is provided, use context_date.",
     "- Keep text concise and action-oriented.",
     "- Extract attributes into keys when possible (time, location, etc.).",
+    "- If request clearly matches one of topics_context values, set keys.topic to that exact topic label.",
     "- Convert time to 24-hour HHmm integer in keys.time when possible.",
     "- Do not include [keys:{...}] in text.",
     "- Keep keys flat with primitive values only.",
+    "- Use memory_context when it improves date or detail resolution.",
     "- Return valid JSON only.",
   ].join("\n");
 
@@ -338,21 +512,13 @@ export async function parseTodoWithClaude(
     `current_date: ${todayInTimezone}`,
     `current_weekday: ${weekdayForDate(todayInTimezone, timezone)}`,
     `timezone: ${timezone}`,
+    `memory_context:\n${memoryContext}`,
+    `topics_context:\n${topicsContext}`,
   ].join("\n");
 
   const cliPrompt = `${systemPrompt}\n\n${userPrompt}`;
   const rawOutput = await runLocalClaude(cliPrompt);
-
-  let modelText = rawOutput;
-  try {
-    const payload = JSON.parse(rawOutput) as unknown;
-    const extracted = extractAssistantText(payload);
-    if (extracted) {
-      modelText = extracted;
-    }
-  } catch {
-    // If stdout is plain text, use it directly.
-  }
+  const modelText = extractModelText(rawOutput);
 
   const parsed = parseJsonFromModelText(modelText);
 

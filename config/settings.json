@@ -1,3 +1,4 @@
 {
-  "weekStartsOn": "SUN"
+  "weekStartsOn": "SUN",
+  "moveDoneToBottom": false
 }
