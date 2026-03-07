@@ -1,5 +1,8 @@
 <template>
   <div class="theme-root mx-auto max-w-3xl px-4 py-8 sm:py-12">
+    <!-- Sky Visualizer -->
+    <SkyVisualizer v-if="!isSettingsOpen" />
+
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-lg font-semibold tracking-tight text-stone-800">
@@ -475,6 +478,7 @@ import {
 import WeekBar from "./components/WeekBar.vue";
 import TodoInput from "./components/TodoInput.vue";
 import TodoItem from "./components/TodoItem.vue";
+import SkyVisualizer from "./components/SkyVisualizer.vue";
 
 interface WeekTodoCounts {
   [date: string]: number;
@@ -871,7 +875,7 @@ function parseTodoTimeValue(raw: unknown): number | null {
 
 export default defineComponent({
   name: "App",
-  components: { WeekBar, TodoInput, TodoItem },
+  components: { WeekBar, TodoInput, TodoItem, SkyVisualizer },
   data() {
     const initialToday = todayStr();
     return {
