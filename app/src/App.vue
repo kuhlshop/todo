@@ -1,440 +1,516 @@
 <template>
-  <div class="theme-root mx-auto max-w-3xl px-4 py-8 sm:py-12">
+  <div class="theme-root mx-auto max-w-[500px] px-4 pt-0 pb-8 sm:pt-0 sm:pb-12">
     <!-- Sky Visualizer -->
     <SkyVisualizer v-if="!isSettingsOpen" />
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-lg font-semibold tracking-tight text-stone-800">
-        {{ isSettingsOpen ? "Settings" : "Todos" }}
-      </h1>
-      <button
-        v-if="isSettingsOpen"
-        class="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-50"
-        @click="closeSettings"
-      >
-        Back
-      </button>
-    </div>
-
-    <div v-if="isSettingsOpen" class="space-y-4">
-      <div class="overflow-x-auto pb-1">
-        <div class="inline-flex min-w-full gap-1 rounded-xl border border-stone-200 bg-white p-1">
-          <button
-            v-for="file in configFiles"
-            :key="file.fileName"
-            class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-            :class="
-              activeConfigTab === file.fileName
-                ? 'text-white bg-[var(--theme-primary)]'
-                : 'text-stone-600 hover:bg-stone-100'
-            "
-            @click="selectConfigTab(file.fileName)"
-          >
-            {{ formatConfigTabLabel(file.fileName) }}
-          </button>
-        </div>
+    <div
+      class="relative -mt-16 rounded-2xl border border-stone-200/80 bg-white/95 p-5 shadow-xl shadow-stone-300/20 backdrop-blur-sm sm:p-6"
+    >
+      <!-- Header -->
+      <div class="mb-6 flex items-center justify-between border-b border-stone-100 pb-4">
+        <h1 class="text-xl font-semibold tracking-tight text-stone-900">
+          {{ isSettingsOpen ? "Settings" : "Todos" }}
+        </h1>
+        <button
+          v-if="isSettingsOpen"
+          class="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50"
+          @click="closeSettings"
+        >
+          Back
+        </button>
       </div>
-
-      <div class="rounded-xl border border-stone-200 bg-white p-4">
-        <div v-if="!activeConfigFile" class="py-4 text-sm text-stone-500">
-          No editable config files found.
-        </div>
-
-        <template v-else>
-          <h2 class="text-sm font-semibold text-stone-700">
-            {{
-              activeConfigFile.kind === "json_schema"
-                ? activeConfigFile.jsonSchema?.title || formatConfigTabLabel(activeConfigFile.fileName)
-                : formatConfigTabLabel(activeConfigFile.fileName)
-            }}
-          </h2>
-          <p
-            v-if="activeConfigFile.kind === 'json_schema' && activeConfigFile.jsonSchema?.description"
-            class="mt-1 text-xs text-stone-400"
-          >
-            {{ activeConfigFile.jsonSchema.description }}
-          </p>
-
-          <div v-if="activeConfigFile.kind === 'markdown'" class="mt-3 space-y-2">
-            <textarea
-              :value="getMarkdownDraft(activeConfigFile.fileName)"
-              @input="setMarkdownDraft(activeConfigFile.fileName, ($event.target as HTMLTextAreaElement).value)"
-              rows="14"
-              class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
-            />
-            <p class="text-xs text-stone-400">
-              Markdown content is saved directly to
-              <span class="font-mono">{{ activeConfigFile.fileName }}</span>.
-            </p>
-          </div>
-
+      <div v-if="isSettingsOpen" class="space-y-5">
+        <div class="overflow-x-auto pb-1">
           <div
-            v-else-if="activeConfigFile.kind === 'json_schema'"
-            class="mt-3 space-y-3"
+            class="inline-flex min-w-full gap-1 rounded-xl bg-stone-50 p-1 ring-1 ring-stone-100"
           >
-            <div
-              v-if="!activeConfigFile.jsonSchema || activeConfigFile.jsonSchema.fields.length === 0"
-              class="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-500"
-            >
-              This JSON file has no schema fields to edit.
-            </div>
-
-            <div
-              v-if="activeConfigFile.fileName === 'theme.json'"
-              class="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2"
-            >
-              <div class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
-                Preset Themes
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="preset in themePresets"
-                  :key="preset.key"
-                  class="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    isThemePresetSelected(preset.key)
-                      ? 'text-white border-[var(--theme-primary)] bg-[var(--theme-primary)]'
-                      : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
-                  "
-                  @click="applyThemePreset(preset.key)"
-                >
-                  {{ preset.label }}
-                </button>
-              </div>
-            </div>
-
-            <div
-              v-for="field in activeConfigFile.jsonSchema?.fields || []"
-              :key="field.key"
-              class="space-y-1"
-            >
-              <label class="block text-xs font-medium uppercase tracking-wide text-stone-500">
-                {{ field.label }}
-              </label>
-
-              <input
-                v-if="field.type === 'text'"
-                type="text"
-                :value="String(getJsonDraftValue(activeConfigFile.fileName, field.key))"
-                @input="setJsonDraftValue(activeConfigFile.fileName, field.key, ($event.target as HTMLInputElement).value)"
-                :placeholder="field.placeholder || ''"
-                class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
-              />
-
-              <div
-                v-else-if="field.type === 'color'"
-                class="flex items-center gap-3 rounded-lg border border-stone-200 bg-white px-3 py-2"
-              >
-                <input
-                  type="color"
-                  :value="String(getJsonDraftValue(activeConfigFile.fileName, field.key))"
-                  @input="setJsonDraftValue(activeConfigFile.fileName, field.key, ($event.target as HTMLInputElement).value)"
-                  class="h-8 w-12 cursor-pointer rounded border border-stone-200 bg-transparent p-0"
-                />
-                <span class="font-mono text-xs text-stone-500">
-                  {{ String(getJsonDraftValue(activeConfigFile.fileName, field.key)) }}
-                </span>
-              </div>
-
-              <textarea
-                v-else-if="field.type === 'textarea'"
-                :value="String(getJsonDraftValue(activeConfigFile.fileName, field.key))"
-                @input="setJsonDraftValue(activeConfigFile.fileName, field.key, ($event.target as HTMLTextAreaElement).value)"
-                rows="4"
-                :placeholder="field.placeholder || ''"
-                class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
-              />
-
-              <input
-                v-else-if="field.type === 'number'"
-                type="number"
-                :value="getJsonNumberValue(activeConfigFile.fileName, field.key)"
-                @input="setJsonDraftValue(activeConfigFile.fileName, field.key, Number(($event.target as HTMLInputElement).value))"
-                :min="field.min"
-                :max="field.max"
-                :step="field.step || 1"
-                class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
-              />
-
-              <select
-                v-else-if="field.type === 'select'"
-                :value="String(getJsonDraftValue(activeConfigFile.fileName, field.key))"
-                @change="setJsonDraftValue(activeConfigFile.fileName, field.key, ($event.target as HTMLSelectElement).value)"
-                class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
-              >
-                <option
-                  v-for="option in field.options || []"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-
-              <label
-                v-else-if="field.type === 'boolean'"
-                class="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-700"
-              >
-                <input
-                  type="checkbox"
-                  :checked="Boolean(getJsonDraftValue(activeConfigFile.fileName, field.key))"
-                  @change="setJsonDraftValue(activeConfigFile.fileName, field.key, ($event.target as HTMLInputElement).checked)"
-                />
-                Enabled
-              </label>
-
-              <p v-if="field.description" class="text-xs text-stone-400">
-                {{ field.description }}
-              </p>
-            </div>
-          </div>
-
-          <div class="mt-4 flex items-center justify-end">
             <button
-              class="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+              v-for="file in configFiles"
+              :key="file.fileName"
+              class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
               :class="
-                isSavingConfig
-                  ? 'border-stone-200 bg-stone-100 text-stone-400'
-                  : 'text-white border-[var(--theme-primary)] bg-[var(--theme-primary)]'
+                activeConfigTab === file.fileName
+                  ? 'text-white bg-[var(--theme-primary)]'
+                  : 'text-stone-600 hover:bg-stone-100'
               "
-              :disabled="isSavingConfig"
-              @click="saveActiveConfig"
+              @click="selectConfigTab(file.fileName)"
             >
-              {{ isSavingConfig ? "Saving..." : "Save changes" }}
+              {{ formatConfigTabLabel(file.fileName) }}
             </button>
           </div>
-        </template>
-      </div>
-    </div>
-
-    <div v-else>
-      <div class="mb-5 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <button
-            class="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-50"
-            @click="toggleCalendar"
-          >
-            Calendar View
-          </button>
         </div>
-        <span class="text-xs text-stone-400 font-mono">
-          {{ monthLabel }}
-        </span>
-      </div>
-
-      <div
-        v-if="isCalendarOpen"
-        class="mb-6 rounded-xl border border-stone-200 bg-white p-3"
-      >
-        <div class="mb-3 flex items-center justify-between">
-          <button
-            class="rounded-lg border border-stone-200 px-2.5 py-1 text-stone-500 transition-colors hover:bg-stone-50"
-            @click="changeCalendarMonth(-1)"
-          >
-            <span aria-hidden="true">&larr;</span>
-          </button>
-          <div class="text-sm font-medium text-stone-700">
-            {{ calendarMonthLabel }}
+        <div class="rounded-xl bg-white p-4 ring-1 ring-stone-100">
+          <div v-if="!activeConfigFile" class="py-4 text-sm text-stone-500">
+            No editable config files found.
           </div>
-          <button
-            class="rounded-lg border border-stone-200 px-2.5 py-1 text-stone-500 transition-colors hover:bg-stone-50"
-            @click="changeCalendarMonth(1)"
-          >
-            <span aria-hidden="true">&rarr;</span>
-          </button>
-        </div>
-
-        <div class="grid grid-cols-7 gap-1.5 pb-1 text-center text-xs text-stone-400">
-          <div
-            v-for="weekday in calendarWeekdayHeaders"
-            :key="weekday"
-            class="font-medium uppercase tracking-wide"
-          >
-            {{ weekday }}
-          </div>
-        </div>
-
-        <div v-if="isCalendarLoading" class="py-6 text-center text-xs text-stone-400">
-          Loading calendar...
-        </div>
-        <div v-else class="grid grid-cols-7 gap-1.5">
-          <button
-            v-for="cell in calendarCells"
-            :key="cell.key"
-            :disabled="!cell.date"
-          class="min-h-[58px] rounded-lg border border-transparent px-1.5 py-1 text-left transition-colors disabled:cursor-default"
-            :class="calendarCellClass(cell)"
-            @click="cell.date && selectCalendarDate(cell.date)"
-          >
-            <div class="text-xs font-medium">{{ cell.dayNum || "" }}</div>
-            <div v-if="cell.stats.total > 0" class="mt-1 space-y-0.5 text-[10px] leading-3">
+          <template v-else>
+            <h2 class="text-sm font-semibold text-stone-700">
+              {{
+                activeConfigFile.kind === "json_schema"
+                  ? activeConfigFile.jsonSchema?.title ||
+                    formatConfigTabLabel(activeConfigFile.fileName)
+                  : formatConfigTabLabel(activeConfigFile.fileName)
+              }}
+            </h2>
+            <p
+              v-if="
+                activeConfigFile.kind === 'json_schema' &&
+                activeConfigFile.jsonSchema?.description
+              "
+              class="mt-1 text-xs text-stone-400"
+            >
+              {{ activeConfigFile.jsonSchema.description }}
+            </p>
+            <div
+              v-if="activeConfigFile.kind === 'markdown'"
+              class="mt-3 space-y-2"
+            >
+              <textarea
+                :value="getMarkdownDraft(activeConfigFile.fileName)"
+                @input="
+                  setMarkdownDraft(
+                    activeConfigFile.fileName,
+                    ($event.target as HTMLTextAreaElement).value
+                  )
+                "
+                rows="14"
+                class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
+              />
+              <p class="text-xs text-stone-400">
+                Markdown content is saved directly to
+                <span class="font-mono">{{ activeConfigFile.fileName }}</span>
+                .
+              </p>
+            </div>
+            <div
+              v-else-if="activeConfigFile.kind === 'json_schema'"
+              class="mt-3 space-y-3"
+            >
               <div
-                v-if="cell.stats.upcoming > 0"
-                class="flex items-center gap-1"
-                :style="{ color: 'var(--theme-pending)' }"
+                v-if="
+                  !activeConfigFile.jsonSchema ||
+                  activeConfigFile.jsonSchema.fields.length === 0
+                "
+                class="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-500"
               >
-                <span
-                  class="h-1.5 w-1.5 rounded-full"
-                  :style="{ backgroundColor: 'var(--theme-pending)' }"
-                />
-                {{ cell.stats.upcoming }}
+                This JSON file has no schema fields to edit.
               </div>
               <div
-                v-if="cell.stats.done > 0"
-                class="flex items-center gap-1"
-                :style="{ color: 'var(--theme-completed)' }"
+                v-if="activeConfigFile.fileName === 'theme.json'"
+                class="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2"
               >
-                <span
-                  class="h-1.5 w-1.5 rounded-full"
-                  :style="{ backgroundColor: 'var(--theme-completed)' }"
+                <div
+                  class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500"
+                >
+                  Preset Themes
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="preset in themePresets"
+                    :key="preset.key"
+                    class="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="
+                      isThemePresetSelected(preset.key)
+                        ? 'text-white border-[var(--theme-primary)] bg-[var(--theme-primary)]'
+                        : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-100'
+                    "
+                    @click="applyThemePreset(preset.key)"
+                  >
+                    {{ preset.label }}
+                  </button>
+                </div>
+              </div>
+              <div
+                v-for="field in activeConfigFile.jsonSchema?.fields || []"
+                :key="field.key"
+                class="space-y-1"
+              >
+                <label
+                  class="block text-xs font-medium uppercase tracking-wide text-stone-500"
+                >
+                  {{ field.label }}
+                </label>
+                <input
+                  v-if="field.type === 'text'"
+                  type="text"
+                  :value="
+                    String(
+                      getJsonDraftValue(activeConfigFile.fileName, field.key)
+                    )
+                  "
+                  @input="
+                    setJsonDraftValue(
+                      activeConfigFile.fileName,
+                      field.key,
+                      ($event.target as HTMLInputElement).value
+                    )
+                  "
+                  :placeholder="field.placeholder || ''"
+                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
                 />
-                {{ cell.stats.done }}
+                <div
+                  v-else-if="field.type === 'color'"
+                  class="flex items-center gap-3 rounded-lg border border-stone-200 bg-white px-3 py-2"
+                >
+                  <input
+                    type="color"
+                    :value="
+                      String(
+                        getJsonDraftValue(activeConfigFile.fileName, field.key)
+                      )
+                    "
+                    @input="
+                      setJsonDraftValue(
+                        activeConfigFile.fileName,
+                        field.key,
+                        ($event.target as HTMLInputElement).value
+                      )
+                    "
+                    class="h-8 w-12 cursor-pointer rounded border border-stone-200 bg-transparent p-0"
+                  />
+                  <span class="font-mono text-xs text-stone-500">
+                    {{
+                      String(
+                        getJsonDraftValue(activeConfigFile.fileName, field.key)
+                      )
+                    }}
+                  </span>
+                </div>
+                <textarea
+                  v-else-if="field.type === 'textarea'"
+                  :value="
+                    String(
+                      getJsonDraftValue(activeConfigFile.fileName, field.key)
+                    )
+                  "
+                  @input="
+                    setJsonDraftValue(
+                      activeConfigFile.fileName,
+                      field.key,
+                      ($event.target as HTMLTextAreaElement).value
+                    )
+                  "
+                  rows="4"
+                  :placeholder="field.placeholder || ''"
+                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
+                />
+                <input
+                  v-else-if="field.type === 'number'"
+                  type="number"
+                  :value="
+                    getJsonNumberValue(activeConfigFile.fileName, field.key)
+                  "
+                  @input="
+                    setJsonDraftValue(
+                      activeConfigFile.fileName,
+                      field.key,
+                      Number(($event.target as HTMLInputElement).value)
+                    )
+                  "
+                  :min="field.min"
+                  :max="field.max"
+                  :step="field.step || 1"
+                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
+                />
+                <select
+                  v-else-if="field.type === 'select'"
+                  :value="
+                    String(
+                      getJsonDraftValue(activeConfigFile.fileName, field.key)
+                    )
+                  "
+                  @change="
+                    setJsonDraftValue(
+                      activeConfigFile.fileName,
+                      field.key,
+                      ($event.target as HTMLSelectElement).value
+                    )
+                  "
+                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition-colors focus:border-[var(--theme-secondary)]"
+                >
+                  <option
+                    v-for="option in field.options || []"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <label
+                  v-else-if="field.type === 'boolean'"
+                  class="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-700"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="
+                      Boolean(
+                        getJsonDraftValue(activeConfigFile.fileName, field.key)
+                      )
+                    "
+                    @change="
+                      setJsonDraftValue(
+                        activeConfigFile.fileName,
+                        field.key,
+                        ($event.target as HTMLInputElement).checked
+                      )
+                    "
+                  />
+                  Enabled
+                </label>
+                <p v-if="field.description" class="text-xs text-stone-400">
+                  {{ field.description }}
+                </p>
               </div>
             </div>
-          </button>
+            <div class="mt-4 flex items-center justify-end">
+              <button
+                class="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+                :class="
+                  isSavingConfig
+                    ? 'border-stone-200 bg-stone-100 text-stone-400'
+                    : 'text-white border-[var(--theme-primary)] bg-[var(--theme-primary)]'
+                "
+                :disabled="isSavingConfig"
+                @click="saveActiveConfig"
+              >
+                {{ isSavingConfig ? "Saving..." : "Save changes" }}
+              </button>
+            </div>
+          </template>
         </div>
       </div>
-
-      <!-- Week Navigation -->
-      <div class="mb-8 flex justify-center">
-        <WeekBar
-          :days="weekDays"
-          :selected-date="selectedDate"
-          :is-this-week="isThisWeek"
-          @select="selectDate"
-          @prev="prevWeek"
-          @next="nextWeek"
-          @today="goToday"
-        />
-      </div>
-
-      <!-- Input -->
-      <div class="mb-7">
-        <TodoInput ref="todoInput" @submit="addTodo" />
-        <div v-if="addQueue.length > 0" class="mt-3 space-y-2">
+      <div v-else>
+        <div class="mb-6 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <button
+              class="rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors"
+              :class="
+                isCalendarOpen
+                  ? 'border-[var(--theme-primary)] bg-[var(--theme-primary)] text-white'
+                  : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+              "
+              @click="toggleCalendar"
+            >
+              Calendar View
+            </button>
+          </div>
+          <span class="font-mono text-sm tracking-[0.08em] text-stone-500">
+            {{ monthLabel }}
+          </span>
+        </div>
+        <div
+          v-if="isCalendarOpen"
+          class="mb-6 rounded-2xl bg-stone-50/80 p-4 ring-1 ring-stone-100"
+        >
+          <div class="mb-3 flex items-center justify-between">
+            <button
+              class="rounded-xl border border-stone-200 px-2.5 py-1 text-stone-600 transition-colors hover:bg-white"
+              @click="changeCalendarMonth(-1)"
+            >
+              <span aria-hidden="true">&larr;</span>
+            </button>
+            <div class="text-sm font-semibold text-stone-800">
+              {{ calendarMonthLabel }}
+            </div>
+            <button
+              class="rounded-xl border border-stone-200 px-2.5 py-1 text-stone-600 transition-colors hover:bg-white"
+              @click="changeCalendarMonth(1)"
+            >
+              <span aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
           <div
-            v-for="item in addQueue"
-            :key="item.id"
-            class="rounded-xl border bg-white px-3 py-2 text-xs shadow-sm"
-            :class="
-              item.status === 'failed'
-                ? 'border-red-200'
-                : 'border-stone-200'
-            "
+            class="grid grid-cols-7 gap-1.5 pb-1 text-center text-xs text-stone-500"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <div class="truncate font-medium text-stone-700">{{ item.text }}</div>
+            <div
+              v-for="weekday in calendarWeekdayHeaders"
+              :key="weekday"
+              class="font-medium uppercase tracking-wide"
+            >
+              {{ weekday }}
+            </div>
+          </div>
+          <div
+            v-if="isCalendarLoading"
+            class="py-6 text-center text-xs text-stone-400"
+          >
+            Loading calendar...
+          </div>
+          <div v-else class="grid grid-cols-7 gap-1.5">
+            <button
+              v-for="cell in calendarCells"
+              :key="cell.key"
+              :disabled="!cell.date"
+              class="min-h-[58px] rounded-lg border border-transparent px-1.5 py-1 text-left transition-colors disabled:cursor-default"
+              :class="calendarCellClass(cell)"
+              @click="cell.date && selectCalendarDate(cell.date)"
+            >
+              <div class="text-xs font-medium">{{ cell.dayNum || "" }}</div>
+              <div
+                v-if="cell.stats.total > 0"
+                class="mt-1 space-y-0.5 text-[10px] leading-3"
+              >
                 <div
-                  v-if="item.status === 'posting'"
-                  class="mt-1 flex items-center gap-1.5 text-stone-400"
+                  v-if="cell.stats.upcoming > 0"
+                  class="flex items-center gap-1"
+                  :style="{ color: 'var(--theme-pending)' }"
                 >
                   <span
-                    class="h-1.5 w-1.5 animate-pulse rounded-full"
+                    class="h-1.5 w-1.5 rounded-full"
                     :style="{ backgroundColor: 'var(--theme-pending)' }"
                   />
-                  Posting task...
+                  {{ cell.stats.upcoming }}
                 </div>
                 <div
-                  v-else
-                  class="mt-1 text-red-600"
+                  v-if="cell.stats.done > 0"
+                  class="flex items-center gap-1"
+                  :style="{ color: 'var(--theme-completed)' }"
                 >
-                  {{ item.error || "Failed to post task." }}
+                  <span
+                    class="h-1.5 w-1.5 rounded-full"
+                    :style="{ backgroundColor: 'var(--theme-completed)' }"
+                  />
+                  {{ cell.stats.done }}
                 </div>
               </div>
-              <div v-if="item.status === 'failed'" class="flex items-center gap-1">
-                <button
-                  class="rounded-md border border-stone-200 px-2 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-50"
-                  @click="retryAddQueueItem(item.id)"
+            </button>
+          </div>
+        </div>
+        <!-- Input -->
+        <div class="mb-6 space-y-3">
+          <div class="rounded-2xl bg-stone-50/80 p-2 ring-1 ring-stone-100">
+            <TodoInput ref="todoInput" @submit="addTodo" />
+          </div>
+          <div v-if="addQueue.length > 0" class="space-y-2">
+            <div
+              v-for="item in addQueue"
+              :key="item.id"
+              class="rounded-xl bg-white px-3 py-2 text-xs shadow-sm ring-1 ring-inset ring-stone-100"
+              :class="
+                item.status === 'failed' ? 'ring-red-200' : 'ring-stone-100'
+              "
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="truncate font-medium text-stone-700">
+                    {{ item.text }}
+                  </div>
+                  <div
+                    v-if="item.status === 'posting'"
+                    class="mt-1 flex items-center gap-1.5 text-stone-400"
+                  >
+                    <span
+                      class="h-1.5 w-1.5 animate-pulse rounded-full"
+                      :style="{ backgroundColor: 'var(--theme-pending)' }"
+                    />
+                    Posting task...
+                  </div>
+                  <div v-else class="mt-1 text-red-600">
+                    {{ item.error || "Failed to post task." }}
+                  </div>
+                </div>
+                <div
+                  v-if="item.status === 'failed'"
+                  class="flex items-center gap-1"
                 >
-                  Retry
-                </button>
-                <button
-                  class="rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50"
-                  @click="dismissAddQueueItem(item.id)"
-                >
-                  Dismiss
-                </button>
+                  <button
+                    class="rounded-md border border-stone-200 px-2 py-1 text-[11px] font-medium text-stone-600 transition-colors hover:bg-stone-50"
+                    @click="retryAddQueueItem(item.id)"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    class="rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50"
+                    @click="dismissAddQueueItem(item.id)"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <!-- Date label -->
-      <div class="mb-4">
-        <div class="flex items-center gap-3">
-          <h2 class="text-sm font-semibold uppercase tracking-wider text-stone-500">
-            {{ dayLabel }}
-          </h2>
-          <div v-if="todos.length > 0" class="text-xs text-stone-400">
-            {{ doneCount }}/{{ todos.length }} done
+        <!-- Date label -->
+        <div class="mb-5">
+          <div class="flex items-center gap-3">
+            <h2
+              class="text-sm font-semibold uppercase tracking-wider text-stone-600"
+            >
+              {{ dayLabel }}
+            </h2>
+            <div v-if="todos.length > 0" class="text-xs text-stone-500">
+              {{ doneCount }}/{{ todos.length }} done
+            </div>
+          </div>
+          <div v-if="todos.length > 0" class="mt-2">
+            <div class="h-1.5 overflow-hidden rounded-full bg-stone-200">
+              <div
+                class="h-full rounded-full transition-all duration-500"
+                :style="{
+                  width: progressPercent + '%',
+                  backgroundColor: 'var(--theme-completed)',
+                }"
+              />
+            </div>
           </div>
         </div>
-        <div v-if="todos.length > 0" class="mt-2">
-          <div class="h-1.5 overflow-hidden rounded-full bg-stone-200">
+        <!-- Todo List -->
+        <div v-if="isLoading" class="py-12 text-center text-sm text-stone-500">
+          Loading...
+        </div>
+        <div v-else-if="todos.length === 0" class="py-12 text-center">
+          <p class="text-sm text-stone-500">No todos for this day.</p>
+          <p class="mt-1 text-xs text-stone-400">Type above to add one!</p>
+        </div>
+        <div v-else class="space-y-5">
+          <section v-if="timedTodos.length > 0">
+            <h3
+              class="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500"
+            >
+              Timed Todos
+            </h3>
             <div
-              class="h-full rounded-full transition-all duration-500"
-              :style="{ width: progressPercent + '%', backgroundColor: 'var(--theme-completed)' }"
-            />
-          </div>
+              class="space-y-1 rounded-2xl bg-white p-2 ring-1 ring-stone-100"
+            >
+              <TodoItem
+                v-for="todo in timedTodos"
+                :key="todo.originalIndex"
+                :todo="todo"
+                :selected-date="selectedDate"
+                :now-ts="nowTimestamp"
+                @toggle="toggleTodo(todo.originalIndex)"
+                @delete="deleteTodo(todo.originalIndex)"
+                @update="(text: string) => updateTodo(todo.originalIndex, text)"
+              />
+            </div>
+          </section>
+          <section v-for="section in untimedTodoSections" :key="section.id">
+            <h3
+              class="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500"
+            >
+              {{ section.label }}
+            </h3>
+            <div
+              class="space-y-1 rounded-2xl bg-white p-2 ring-1 ring-stone-100"
+            >
+              <TodoItem
+                v-for="(todo, index) in section.todos"
+                :key="todo.originalIndex"
+                :todo="todo"
+                :selected-date="selectedDate"
+                :now-ts="nowTimestamp"
+                :can-move-up="index > 0"
+                :can-move-down="index < section.todos.length - 1"
+                @toggle="toggleTodo(todo.originalIndex)"
+                @delete="deleteTodo(todo.originalIndex)"
+                @update="(text: string) => updateTodo(todo.originalIndex, text)"
+                @move-up="moveTodoWithinSection(section.id, index, -1)"
+                @move-down="moveTodoWithinSection(section.id, index, 1)"
+              />
+            </div>
+          </section>
         </div>
       </div>
-
-      <!-- Todo List -->
-      <div v-if="isLoading" class="py-12 text-center text-sm text-stone-400">
-        Loading...
-      </div>
-      <div v-else-if="todos.length === 0" class="py-12 text-center">
-        <p class="text-stone-400 text-sm">No todos for this day.</p>
-        <p class="text-stone-300 text-xs mt-1">Type above to add one!</p>
-      </div>
-      <div v-else class="space-y-5">
-        <section v-if="timedTodos.length > 0">
-          <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">
-            Timed Todos
-          </h3>
-          <div class="space-y-1 rounded-xl border border-stone-200 bg-white p-2">
-            <TodoItem
-              v-for="todo in timedTodos"
-              :key="todo.originalIndex"
-              :todo="todo"
-              :selected-date="selectedDate"
-              :now-ts="nowTimestamp"
-              @toggle="toggleTodo(todo.originalIndex)"
-              @delete="deleteTodo(todo.originalIndex)"
-              @update="(text: string) => updateTodo(todo.originalIndex, text)"
-            />
-          </div>
-        </section>
-
-        <section
-          v-for="section in untimedTodoSections"
-          :key="section.id"
-        >
-          <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
-            {{ section.label }}
-          </h3>
-          <div class="space-y-1 rounded-xl border border-stone-200 bg-white p-2">
-            <TodoItem
-              v-for="(todo, index) in section.todos"
-              :key="todo.originalIndex"
-              :todo="todo"
-              :selected-date="selectedDate"
-              :now-ts="nowTimestamp"
-              :can-move-up="index > 0"
-              :can-move-down="index < section.todos.length - 1"
-              @toggle="toggleTodo(todo.originalIndex)"
-              @delete="deleteTodo(todo.originalIndex)"
-              @update="(text: string) => updateTodo(todo.originalIndex, text)"
-              @move-up="moveTodoWithinSection(section.id, index, -1)"
-              @move-down="moveTodoWithinSection(section.id, index, 1)"
-            />
-          </div>
-        </section>
-      </div>
-
     </div>
   </div>
 
@@ -475,7 +551,6 @@ import {
   type TodoKeyValue,
   type WeekStart,
 } from "./api";
-import WeekBar from "./components/WeekBar.vue";
 import TodoInput from "./components/TodoInput.vue";
 import TodoItem from "./components/TodoItem.vue";
 import SkyVisualizer from "./components/SkyVisualizer.vue";
@@ -561,19 +636,22 @@ const FONT_OPTIONS: FontOption[] = [
     value: "Inter",
     label: "Inter",
     googleFamily: "Inter:wght@400;500;600;700",
-    cssStack: '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+    cssStack:
+      '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   },
   {
     value: "Poppins",
     label: "Poppins",
     googleFamily: "Poppins:wght@400;500;600;700",
-    cssStack: '"Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+    cssStack:
+      '"Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   },
   {
     value: "Roboto",
     label: "Roboto",
     googleFamily: "Roboto:wght@400;500;700",
-    cssStack: '"Roboto", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+    cssStack:
+      '"Roboto", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   },
   {
     value: "Montserrat",
@@ -599,7 +677,8 @@ const FONT_OPTIONS: FontOption[] = [
     value: "JetBrains Mono",
     label: "JetBrains Mono",
     googleFamily: "JetBrains+Mono:wght@400;500;700",
-    cssStack: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+    cssStack:
+      '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
   },
   {
     value: "Fira Code",
@@ -778,7 +857,15 @@ function shiftMonth(monthKey: string, delta: number): string {
   return monthKeyFromDate(d);
 }
 
-const WEEK_ORDER: WeekStart[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const WEEK_ORDER: WeekStart[] = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+];
 
 const WEEK_SHORT_LABEL: Record<WeekStart, string> = {
   SUN: "Su",
@@ -845,7 +932,9 @@ function parseTodoTimeValue(raw: unknown): number | null {
     const meridiemNormalized = compact
       .replace(/a\.?m?\.?$/, "am")
       .replace(/p\.?m?\.?$/, "pm");
-    const match = meridiemNormalized.match(/^(\d{1,2})(?:(?::|\.)(\d{2}))?(am|pm)?$/);
+    const match = meridiemNormalized.match(
+      /^(\d{1,2})(?:(?::|\.)(\d{2}))?(am|pm)?$/
+    );
     if (!match) return null;
 
     const hourToken = match[1];
@@ -875,7 +964,7 @@ function parseTodoTimeValue(raw: unknown): number | null {
 
 export default defineComponent({
   name: "App",
-  components: { WeekBar, TodoInput, TodoItem, SkyVisualizer },
+  components: { TodoInput, TodoItem, SkyVisualizer },
   data() {
     const initialToday = todayStr();
     return {
@@ -939,7 +1028,8 @@ export default defineComponent({
         const d = new Date(this.weekStart);
         d.setDate(d.getDate() + i);
         const date = toDateStr(d);
-        const weekday = WEEK_ORDER[(WEEK_ORDER.indexOf(this.weekStartsOn) + i) % 7]!;
+        const weekday =
+          WEEK_ORDER[(WEEK_ORDER.indexOf(this.weekStartsOn) + i) % 7]!;
         return {
           date,
           label: WEEK_SHORT_LABEL[weekday],
@@ -968,7 +1058,9 @@ export default defineComponent({
     untimedTodoSections(): TopicSection[] {
       const untimed = this.todosWithMetadata.filter((todo) => !todo.isTimed);
       const sections = new Map<string, TopicSection>();
-      const declaredTopics = this.topics.map((topic) => this.normalizeTopicLabel(topic));
+      const declaredTopics = this.topics.map((topic) =>
+        this.normalizeTopicLabel(topic)
+      );
       const canonicalTopics = new Map<string, string>();
 
       for (const topic of declaredTopics) {
@@ -985,7 +1077,11 @@ export default defineComponent({
       const ensureOtherSection = (): TopicSection => {
         const existing = sections.get(OTHER_ID);
         if (existing) return existing;
-        const created: TopicSection = { id: OTHER_ID, label: "Other", todos: [] };
+        const created: TopicSection = {
+          id: OTHER_ID,
+          label: "Other",
+          todos: [],
+        };
         sections.set(OTHER_ID, created);
         return created;
       };
@@ -1032,7 +1128,8 @@ export default defineComponent({
           const aTime = a.numericTime ?? Number.MAX_SAFE_INTEGER;
           const bTime = b.numericTime ?? Number.MAX_SAFE_INTEGER;
           if (aTime !== bTime) return aTime - bTime;
-          if (this.moveDoneToBottom && a.done !== b.done) return a.done ? 1 : -1;
+          if (this.moveDoneToBottom && a.done !== b.done)
+            return a.done ? 1 : -1;
           return a.originalIndex - b.originalIndex;
         });
     },
@@ -1105,7 +1202,11 @@ export default defineComponent({
     },
     activeConfigFile(): ConfigFilePayload | null {
       if (!this.activeConfigTab) return null;
-      return this.configFiles.find((file) => file.fileName === this.activeConfigTab) ?? null;
+      return (
+        this.configFiles.find(
+          (file) => file.fileName === this.activeConfigTab
+        ) ?? null
+      );
     },
   },
   created() {
@@ -1148,7 +1249,11 @@ export default defineComponent({
     async initialize() {
       await this.loadConfigFiles();
       this.calendarMonth = this.selectedDate.slice(0, 7);
-      await Promise.all([this.loadDay(), this.loadWeek(), this.loadCalendarMonthStats()]);
+      await Promise.all([
+        this.loadDay(),
+        this.loadWeek(),
+        this.loadCalendarMonthStats(),
+      ]);
     },
     applyWeekStart(weekStartsOn: WeekStart) {
       this.weekStartsOn = weekStartsOn;
@@ -1156,7 +1261,9 @@ export default defineComponent({
       this.weekStart = getWeekStartDate(selected, this.weekStartsOn);
     },
     parseWeekStart(value: unknown): WeekStart | null {
-      return WEEK_ORDER.includes(value as WeekStart) ? (value as WeekStart) : null;
+      return WEEK_ORDER.includes(value as WeekStart)
+        ? (value as WeekStart)
+        : null;
     },
     parseMoveDoneToBottom(value: unknown): boolean | null {
       return typeof value === "boolean" ? value : null;
@@ -1164,14 +1271,18 @@ export default defineComponent({
     parseThemeColor(value: unknown): string | null {
       if (typeof value !== "string") return null;
       const trimmed = value.trim();
-      return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed) ? trimmed : null;
+      return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed)
+        ? trimmed
+        : null;
     },
     parseThemeFont(value: unknown): string | null {
       if (typeof value !== "string") return null;
       return FONT_OPTIONS.some((font) => font.value === value) ? value : null;
     },
     getFontOption(value: string): FontOption {
-      return FONT_OPTIONS.find((font) => font.value === value) ?? FONT_OPTIONS[0]!;
+      return (
+        FONT_OPTIONS.find((font) => font.value === value) ?? FONT_OPTIONS[0]!
+      );
     },
     ensureGoogleFontsLoaded(fonts: string[]) {
       const families = Array.from(new Set(fonts))
@@ -1179,8 +1290,12 @@ export default defineComponent({
         .filter(Boolean);
       if (families.length === 0) return;
 
-      const href = `https://fonts.googleapis.com/css2?family=${families.join("&family=")}&display=swap`;
-      const existing = document.getElementById("todo-google-fonts") as HTMLLinkElement | null;
+      const href = `https://fonts.googleapis.com/css2?family=${families.join(
+        "&family="
+      )}&display=swap`;
+      const existing = document.getElementById(
+        "todo-google-fonts"
+      ) as HTMLLinkElement | null;
 
       if (existing) {
         if (existing.href !== href) {
@@ -1195,7 +1310,9 @@ export default defineComponent({
       link.href = href;
       document.head.appendChild(link);
     },
-    normalizeThemeFromValues(rawValues?: Record<string, TodoKeyValue>): AppTheme {
+    normalizeThemeFromValues(
+      rawValues?: Record<string, TodoKeyValue>
+    ): AppTheme {
       const nextTheme: AppTheme = { ...DEFAULT_THEME };
       const maybePrimary = this.parseThemeColor(rawValues?.primary);
       const maybeSecondary = this.parseThemeColor(rawValues?.secondary);
@@ -1235,12 +1352,16 @@ export default defineComponent({
       this.ensureGoogleFontsLoaded([headingFont.value, textFont.value]);
     },
     applyThemeFromConfigs() {
-      const themeFile = this.configFiles.find((file) => file.fileName === "theme.json");
+      const themeFile = this.configFiles.find(
+        (file) => file.fileName === "theme.json"
+      );
       this.theme = this.normalizeThemeFromValues(themeFile?.jsonValues);
       this.applyThemeVariables();
     },
     applyThemeFromDraft() {
-      this.theme = this.normalizeThemeFromValues(this.jsonDraftByFile["theme.json"]);
+      this.theme = this.normalizeThemeFromValues(
+        this.jsonDraftByFile["theme.json"]
+      );
       this.applyThemeVariables();
     },
     applyThemePreset(presetKey: string) {
@@ -1252,7 +1373,9 @@ export default defineComponent({
     isThemePresetSelected(presetKey: string): boolean {
       const preset = this.themePresets.find((entry) => entry.key === presetKey);
       if (!preset) return false;
-      const draft = this.normalizeThemeFromValues(this.jsonDraftByFile["theme.json"]);
+      const draft = this.normalizeThemeFromValues(
+        this.jsonDraftByFile["theme.json"]
+      );
       return (
         draft.primary === preset.theme.primary &&
         draft.secondary === preset.theme.secondary &&
@@ -1264,13 +1387,17 @@ export default defineComponent({
       );
     },
     applySettingsFromConfigs() {
-      const settingsFile = this.configFiles.find((file) => file.fileName === "settings.json");
-      const parsedWeekStart = this.parseWeekStart(settingsFile?.jsonValues?.weekStartsOn);
+      const settingsFile = this.configFiles.find(
+        (file) => file.fileName === "settings.json"
+      );
+      const parsedWeekStart = this.parseWeekStart(
+        settingsFile?.jsonValues?.weekStartsOn
+      );
       if (parsedWeekStart) {
         this.applyWeekStart(parsedWeekStart);
       }
       const parsedMoveDoneToBottom = this.parseMoveDoneToBottom(
-        settingsFile?.jsonValues?.moveDoneToBottom,
+        settingsFile?.jsonValues?.moveDoneToBottom
       );
       if (parsedMoveDoneToBottom !== null) {
         this.moveDoneToBottom = parsedMoveDoneToBottom;
@@ -1293,7 +1420,11 @@ export default defineComponent({
     getJsonDraftValue(fileName: string, key: string): TodoKeyValue {
       const fileDraft = this.jsonDraftByFile[fileName] ?? {};
       const value = fileDraft[key];
-      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
         return value;
       }
       return "";
@@ -1318,7 +1449,10 @@ export default defineComponent({
         for (const file of files) {
           this.seedConfigDraft(file);
         }
-        if (!this.activeConfigTab || !files.some((file) => file.fileName === this.activeConfigTab)) {
+        if (
+          !this.activeConfigTab ||
+          !files.some((file) => file.fileName === this.activeConfigTab)
+        ) {
           this.activeConfigTab = files[0]?.fileName ?? "";
         }
         this.applySettingsFromConfigs();
@@ -1337,7 +1471,9 @@ export default defineComponent({
     },
     selectConfigTab(fileName: string) {
       this.activeConfigTab = fileName;
-      const target = this.configFiles.find((file) => file.fileName === fileName);
+      const target = this.configFiles.find(
+        (file) => file.fileName === fileName
+      );
       if (target) {
         this.seedConfigDraft(target);
       }
@@ -1359,7 +1495,9 @@ export default defineComponent({
               : undefined,
         });
 
-        const idx = this.configFiles.findIndex((file) => file.fileName === saved.fileName);
+        const idx = this.configFiles.findIndex(
+          (file) => file.fileName === saved.fileName
+        );
         if (idx >= 0) {
           this.configFiles.splice(idx, 1, saved);
         } else {
@@ -1368,9 +1506,11 @@ export default defineComponent({
         this.seedConfigDraft(saved);
 
         if (saved.fileName === "settings.json") {
-          const maybeWeekStart = this.parseWeekStart(saved.jsonValues?.weekStartsOn);
+          const maybeWeekStart = this.parseWeekStart(
+            saved.jsonValues?.weekStartsOn
+          );
           const maybeMoveDoneToBottom = this.parseMoveDoneToBottom(
-            saved.jsonValues?.moveDoneToBottom,
+            saved.jsonValues?.moveDoneToBottom
           );
 
           if (maybeWeekStart) {
@@ -1496,7 +1636,7 @@ export default defineComponent({
       this.selectedDate = todayStr();
       this.weekStart = getWeekStartDate(
         new Date(this.selectedDate + "T12:00:00"),
-        this.weekStartsOn,
+        this.weekStartsOn
       );
       this.loadDay();
       this.loadWeek();
@@ -1520,13 +1660,18 @@ export default defineComponent({
         this.todos = result.todos;
         this.weekCounts[resolvedDate] = result.todos.length;
         if (resolvedDate.startsWith(this.calendarMonth)) {
-          this.monthStats[resolvedDate] = this.toDayStats(resolvedDate, result.todos);
+          this.monthStats[resolvedDate] = this.toDayStats(
+            resolvedDate,
+            result.todos
+          );
         }
         return true;
       } catch (e) {
         console.error("Failed to add todo:", e);
         const message = e instanceof Error ? e.message : "Failed to post task.";
-        const index = this.addQueue.findIndex((queueItem) => queueItem.id === item.id);
+        const index = this.addQueue.findIndex(
+          (queueItem) => queueItem.id === item.id
+        );
         if (index !== -1) {
           this.addQueue[index] = {
             ...this.addQueue[index]!,
@@ -1543,11 +1688,15 @@ export default defineComponent({
       try {
         // Process oldest queued posting task first.
         while (true) {
-          const nextItem = this.addQueue.find((item) => item.status === "posting");
+          const nextItem = this.addQueue.find(
+            (item) => item.status === "posting"
+          );
           if (!nextItem) break;
           const succeeded = await this.postQueuedTodo(nextItem);
           if (succeeded) {
-            this.addQueue = this.addQueue.filter((item) => item.id !== nextItem.id);
+            this.addQueue = this.addQueue.filter(
+              (item) => item.id !== nextItem.id
+            );
           }
         }
       } finally {
@@ -1606,7 +1755,10 @@ export default defineComponent({
       try {
         this.todos = await api.toggleTodo(this.selectedDate, index);
         if (this.selectedDate.startsWith(this.calendarMonth)) {
-          this.monthStats[this.selectedDate] = this.toDayStats(this.selectedDate, this.todos);
+          this.monthStats[this.selectedDate] = this.toDayStats(
+            this.selectedDate,
+            this.todos
+          );
         }
       } catch (e) {
         console.error("Failed to toggle todo:", e);
@@ -1617,7 +1769,10 @@ export default defineComponent({
         this.todos = await api.deleteTodo(this.selectedDate, index);
         this.weekCounts[this.selectedDate] = this.todos.length;
         if (this.selectedDate.startsWith(this.calendarMonth)) {
-          this.monthStats[this.selectedDate] = this.toDayStats(this.selectedDate, this.todos);
+          this.monthStats[this.selectedDate] = this.toDayStats(
+            this.selectedDate,
+            this.todos
+          );
         }
       } catch (e) {
         console.error("Failed to delete todo:", e);
@@ -1625,20 +1780,25 @@ export default defineComponent({
     },
     async updateTodo(index: number, text: string) {
       try {
-        this.todos = await api.updateTodoText(
-          this.selectedDate,
-          index,
-          text,
-        );
+        this.todos = await api.updateTodoText(this.selectedDate, index, text);
         if (this.selectedDate.startsWith(this.calendarMonth)) {
-          this.monthStats[this.selectedDate] = this.toDayStats(this.selectedDate, this.todos);
+          this.monthStats[this.selectedDate] = this.toDayStats(
+            this.selectedDate,
+            this.todos
+          );
         }
       } catch (e) {
         console.error("Failed to update todo:", e);
       }
     },
-    async moveTodoWithinSection(sectionId: string, index: number, direction: -1 | 1) {
-      const section = this.untimedTodoSections.find((entry) => entry.id === sectionId);
+    async moveTodoWithinSection(
+      sectionId: string,
+      index: number,
+      direction: -1 | 1
+    ) {
+      const section = this.untimedTodoSections.find(
+        (entry) => entry.id === sectionId
+      );
       if (!section) {
         return;
       }
@@ -1654,7 +1814,11 @@ export default defineComponent({
       if (fromIndex === undefined || toIndex === undefined) return;
 
       try {
-        this.todos = await api.reorderTodo(this.selectedDate, fromIndex, toIndex);
+        this.todos = await api.reorderTodo(
+          this.selectedDate,
+          fromIndex,
+          toIndex
+        );
       } catch (e) {
         console.error("Failed to reorder todo:", e);
       }

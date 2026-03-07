@@ -76,8 +76,37 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import { defineComponent } from "vue";
+
+interface Star {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  delay: number;
+  duration: number;
+}
+
+interface Cloud {
+  id: number;
+  x: number;
+  y: number;
+  scale: number;
+  speed: number;
+  delay: number;
+  opacity: number;
+}
+
+interface SunTimes {
+  rise: number;
+  set: number;
+}
+
+interface Position {
+  x: number;
+  y: number;
+}
 
 export default defineComponent({
   name: "SkyVisualizer",
@@ -85,25 +114,33 @@ export default defineComponent({
   data() {
     return {
       now: new Date(),
-      timer: null,
-      stars: [],
-      clouds: [],
+      timer: null as ReturnType<typeof setInterval> | null,
+      stars: [] as Star[],
+      clouds: [] as Cloud[],
     };
   },
 
   computed: {
-    hours() {
+    hours(): number {
       return this.now.getHours() + this.now.getMinutes() / 60;
     },
 
-    sunTimes() {
+    sunTimes(): SunTimes {
       const month = this.now.getMonth();
-      const riseTimes = [7.0, 6.5, 6.0, 5.5, 5.25, 5.0, 5.25, 5.75, 6.25, 6.75, 6.5, 7.0];
-      const setTimes = [17.0, 17.5, 18.0, 19.0, 19.75, 20.25, 20.0, 19.25, 18.25, 17.5, 17.0, 16.75];
-      return { rise: riseTimes[month], set: setTimes[month] };
+      const riseTimes = [
+        7.0, 6.5, 6.0, 5.5, 5.25, 5.0, 5.25, 5.75, 6.25, 6.75, 6.5, 7.0,
+      ];
+      const setTimes = [
+        17.0, 17.5, 18.0, 19.0, 19.75, 20.25, 20.0, 19.25, 18.25, 17.5, 17.0,
+        16.75,
+      ];
+      return {
+        rise: riseTimes[month] ?? 7,
+        set: setTimes[month] ?? 17,
+      };
     },
 
-    dayProgress() {
+    dayProgress(): number {
       const { rise, set } = this.sunTimes;
       const h = this.hours;
       if (h < rise) return -1;
@@ -111,7 +148,7 @@ export default defineComponent({
       return (h - rise) / (set - rise);
     },
 
-    nightProgress() {
+    nightProgress(): number {
       const { rise, set } = this.sunTimes;
       const h = this.hours;
       if (h >= set) {
@@ -122,7 +159,7 @@ export default defineComponent({
       return -1;
     },
 
-    sunPosition() {
+    sunPosition(): Position {
       const p = this.dayProgress;
       if (p < -0.1 || p > 1.1) return { x: -20, y: 120 };
       const clamped = Math.max(0, Math.min(1, p));
@@ -131,7 +168,7 @@ export default defineComponent({
       return { x, y };
     },
 
-    moonPosition() {
+    moonPosition(): Position {
       const p = this.nightProgress;
       if (p < 0 || p > 1) return { x: -20, y: 120 };
       const x = 10 + p * 80;
@@ -139,14 +176,14 @@ export default defineComponent({
       return { x, y };
     },
 
-    sunOpacity() {
+    sunOpacity(): number {
       const p = this.dayProgress;
       if (p < 0) return Math.max(0, 1 + p * 5);
       if (p > 1) return Math.max(0, 1 - (p - 1) * 5);
       return 1;
     },
 
-    moonOpacity() {
+    moonOpacity(): number {
       const p = this.nightProgress;
       if (p < 0) return 0;
       if (p < 0.1) return p * 10;
@@ -154,16 +191,16 @@ export default defineComponent({
       return 1;
     },
 
-    isDaytime() {
+    isDaytime(): boolean {
       const { rise, set } = this.sunTimes;
       return this.hours >= rise && this.hours <= set;
     },
 
-    skyGradient() {
+    skyGradient(): { background: string } {
       const h = this.hours;
       const { rise, set } = this.sunTimes;
 
-      let colors;
+      let colors: string[];
       if (h < rise - 1) {
         colors = ["#0a0e27", "#111b3d", "#162040"];
       } else if (h < rise) {
@@ -219,7 +256,7 @@ export default defineComponent({
       };
     },
 
-    starsOpacity() {
+    starsOpacity(): number {
       const { rise, set } = this.sunTimes;
       const h = this.hours;
       if (h > set + 1 || h < rise - 1) return 1;
@@ -228,11 +265,11 @@ export default defineComponent({
       return 0;
     },
 
-    cloudsOpacity() {
+    cloudsOpacity(): number {
       return this.isDaytime ? 0.7 : 0;
     },
 
-    formattedTime() {
+    formattedTime(): string {
       return this.now.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
@@ -240,7 +277,7 @@ export default defineComponent({
       });
     },
 
-    formattedDate() {
+    formattedDate(): string {
       return this.now.toLocaleDateString("en-US", {
         weekday: "long",
         month: "long",
@@ -266,8 +303,8 @@ export default defineComponent({
   },
 
   methods: {
-    generateStars() {
-      const arr = [];
+    generateStars(): void {
+      const arr: Star[] = [];
       for (let i = 0; i < 50; i++) {
         arr.push({
           id: i,
@@ -281,8 +318,8 @@ export default defineComponent({
       this.stars = arr;
     },
 
-    generateClouds() {
-      const arr = [];
+    generateClouds(): void {
+      const arr: Cloud[] = [];
       for (let i = 0; i < 4; i++) {
         arr.push({
           id: i,
@@ -297,11 +334,11 @@ export default defineComponent({
       this.clouds = arr;
     },
 
-    lerpColors(from, to, t) {
-      return from.map((fc, i) => this.lerpColor(fc, to[i], t));
+    lerpColors(from: string[], to: string[], t: number): string[] {
+      return from.map((fc, i) => this.lerpColor(fc, to[i] ?? fc, t));
     },
 
-    lerpColor(a, b, t) {
+    lerpColor(a: string, b: string, t: number): string {
       const ar = parseInt(a.slice(1, 3), 16);
       const ag = parseInt(a.slice(3, 5), 16);
       const ab = parseInt(a.slice(5, 7), 16);
@@ -311,7 +348,9 @@ export default defineComponent({
       const rr = Math.round(ar + (br - ar) * t);
       const rg = Math.round(ag + (bg - ag) * t);
       const rb = Math.round(ab + (bb - ab) * t);
-      return `#${rr.toString(16).padStart(2, "0")}${rg.toString(16).padStart(2, "0")}${rb.toString(16).padStart(2, "0")}`;
+      return `#${rr.toString(16).padStart(2, "0")}${rg
+        .toString(16)
+        .padStart(2, "0")}${rb.toString(16).padStart(2, "0")}`;
     },
   },
 });
@@ -320,9 +359,10 @@ export default defineComponent({
 <style>
 .sky-container {
   position: relative;
-  width: 100%;
+  width: 100vw;
   height: 300px;
-  border-radius: 16px;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
   overflow: hidden;
   margin-bottom: 1.5rem;
   transition: background 2s ease;
@@ -343,8 +383,14 @@ export default defineComponent({
 }
 
 @keyframes twinkle {
-  0% { opacity: 0.2; transform: scale(0.8); }
-  100% { opacity: 1; transform: scale(1.2); }
+  0% {
+    opacity: 0.2;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 /* Clouds */
@@ -360,9 +406,15 @@ export default defineComponent({
 }
 
 @keyframes cloud-drift {
-  0% { transform: translateX(0); }
-  50% { transform: translateX(30px); }
-  100% { transform: translateX(0); }
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(30px);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
 .cloud-part {
@@ -407,7 +459,11 @@ export default defineComponent({
 .sun-glow {
   position: absolute;
   inset: -16px;
-  background: radial-gradient(circle, rgba(255, 213, 64, 0.4) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 213, 64, 0.4) 0%,
+    transparent 70%
+  );
   border-radius: 50%;
   z-index: 1;
   animation: sun-pulse 4s ease-in-out infinite alternate;
@@ -416,22 +472,37 @@ export default defineComponent({
 .sun-rays {
   position: absolute;
   inset: -24px;
-  background: radial-gradient(circle, rgba(255, 180, 0, 0.15) 0%, transparent 60%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 180, 0, 0.15) 0%,
+    transparent 60%
+  );
   border-radius: 50%;
   z-index: 0;
   animation: sun-pulse 6s ease-in-out infinite alternate-reverse;
 }
 
 @keyframes sun-pulse {
-  0% { transform: scale(1); opacity: 0.7; }
-  100% { transform: scale(1.15); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
 }
 
 /* Moon */
 .moon-body {
   width: 40px;
   height: 40px;
-  background: radial-gradient(circle at 35% 35%, #f0f0f0 0%, #d4d4d4 50%, #b8b8c0 100%);
+  background: radial-gradient(
+    circle at 35% 35%,
+    #f0f0f0 0%,
+    #d4d4d4 50%,
+    #b8b8c0 100%
+  );
   border-radius: 50%;
   position: relative;
   z-index: 2;
@@ -442,7 +513,11 @@ export default defineComponent({
   position: absolute;
   width: 32px;
   height: 32px;
-  background: radial-gradient(circle at 60% 40%, rgba(15, 20, 50, 0.6) 0%, transparent 70%);
+  background: radial-gradient(
+    circle at 60% 40%,
+    rgba(15, 20, 50, 0.6) 0%,
+    transparent 70%
+  );
   border-radius: 50%;
   top: 4px;
   left: 10px;
@@ -452,15 +527,25 @@ export default defineComponent({
 .moon-glow {
   position: absolute;
   inset: -14px;
-  background: radial-gradient(circle, rgba(180, 200, 255, 0.25) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(180, 200, 255, 0.25) 0%,
+    transparent 70%
+  );
   border-radius: 50%;
   z-index: 1;
   animation: moon-glow-pulse 5s ease-in-out infinite alternate;
 }
 
 @keyframes moon-glow-pulse {
-  0% { transform: scale(1); opacity: 0.6; }
-  100% { transform: scale(1.1); opacity: 1; }
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
 }
 
 /* Celestial positioning */
